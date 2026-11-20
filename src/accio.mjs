@@ -25,13 +25,13 @@ export const GATEWAY = 'https://phoenix-gw.alibaba.com'
 /** 只做中国版：登录页固定 www.accio-ai.com。 */
 export const LOGIN_BASE = 'https://www.accio-ai.com'
 
-const TOKEN_EXCHANGE_PATH = '/api/oauth/token'
-const REFRESH_PATH = '/api/auth/refresh_token'
-const LLM_PATH = '/api/adk/llm/generateContent'
-const CATALOG_PATH = '/api/llm/config/v2'
-const SUBSCRIPTION_PATH = '/api/entitlement/currentSubscription'
-const QUOTA_PATH = '/api/entitlement/quota'
-const CALLBACK_PATH = '/auth/callback'
+const PATH_TOKEN_EXCHANGE = '/api/oauth/token'
+const PATH_REFRESH = '/api/auth/refresh_token'
+const PATH_LLM = '/api/adk/llm/generateContent'
+const PATH_CATALOG = '/api/llm/config/v2'
+const PATH_SUBSCRIPTION = '/api/entitlement/currentSubscription'
+const PATH_QUOTA = '/api/entitlement/quota'
+const PATH_CALLBACK = '/auth/callback'
 
 const CLIENT_ID = 'accio-work'
 const APP_KEY = 'OneChat'
@@ -60,6 +60,8 @@ export const proxyOf = () => proxyUrl
 
 const net = () => (proxyUrl === '' ? {} : { proxy: proxyUrl })
 
+const jsonHeaders = { 'content-type': 'application/json', accept: 'application/json' }
+
 // ── 小工具 ────────────────────────────────────────────────────────────────
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -73,16 +75,13 @@ export function expiresAtMs(raw) {
 
 /** camelCase → snake_case（递归）。`undefined` 的键整个丢掉（null ≠ 缺键）。 */
 export function toSnake(value) {
-  if (Array.isArray(value)) return value.map(toSnake)
-  if (value !== null && typeof value === 'object') {
-    const out = {}
-    for (const [key, val] of Object.entries(value)) {
-      if (val === undefined) continue
-      out[key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)] = toSnake(val)
-    }
-    return out
-  }
-  return value
+  if (Array.isArray(value)) return value.map((item) => toSnake(item))
+  if (value === null || typeof value !== 'object') return value
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, val]) => val !== undefined)
+      .map(([key, val]) => [key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), toSnake(val)]),
+  )
 }
 
 const requestIdOf = () => `req-${Date.now()}-${randomUUID().slice(0, 8)}`
@@ -131,17 +130,19 @@ export function buildAuthUrl({ redirectUri, state, codeChallenge }) {
 
 /** 解析 `{success, code, message, data}` 信封；失败抛带服务端原文的错误。 */
 export function unwrapEnvelope(path, status, text) {
-  let body
+  let parsed
   try {
-    body = JSON.parse(text)
+    parsed = JSON.parse(text)
   } catch {
     throw new Error(`accio ${path} 返回非 JSON（HTTP ${status}）：${String(text).slice(0, 200)}`)
   }
-  if (body?.success !== true) {
-    throw new Error(`accio ${path} 失败（${String(body?.code ?? status)} ${String(body?.message ?? '')}）`.trim())
+  if (parsed?.success === true) {
+    if (parsed.data === null || typeof parsed.data !== 'object') throw new Error(`accio ${path} 响应缺 data 对象`)
+    return parsed.data
   }
-  if (body.data === null || typeof body.data !== 'object') throw new Error(`accio ${path} 响应缺 data 对象`)
-  return body.data
+  const code = String(parsed?.code ?? status)
+  const message = String(parsed?.message ?? '')
+  throw new Error(`accio ${path} 失败（${code} ${message}）`.trim())
 }
 
 /** data → 凭据。三件套缺一不可；秒→毫秒在这里一次做完。 */
@@ -162,15 +163,15 @@ export function toCredential(path, data, extra = {}) {
 }
 
 export async function exchangeCode({ code, codeVerifier, redirectUri }) {
-  const res = await fetch(`${GATEWAY}${TOKEN_EXCHANGE_PATH}`, {
+  const res = await fetch(`${GATEWAY}${PATH_TOKEN_EXCHANGE}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: jsonHeaders,
     body: JSON.stringify({ code, codeVerifier, clientId: CLIENT_ID, redirectUri }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     ...net(),
   })
   const text = await res.text()
-  return toCredential(TOKEN_EXCHANGE_PATH, unwrapEnvelope(TOKEN_EXCHANGE_PATH, res.status, text))
+  return toCredential(PATH_TOKEN_EXCHANGE, unwrapEnvelope(PATH_TOKEN_EXCHANGE, res.status, text))
 }
 
 const TERMINAL_MARKERS = [
@@ -193,15 +194,15 @@ export async function refreshCredential(current) {
   if (typeof current?.refresh_token !== 'string' || current.refresh_token === '') {
     throw new Error('凭据缺少 refresh_token，请重新登录')
   }
-  const res = await fetch(`${GATEWAY}${REFRESH_PATH}`, {
+  const res = await fetch(`${GATEWAY}${PATH_REFRESH}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: jsonHeaders,
     body: JSON.stringify({ accessToken: current.access_token, refreshToken: current.refresh_token }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     ...net(),
   })
   const text = await res.text()
-  const next = toCredential(REFRESH_PATH, unwrapEnvelope(REFRESH_PATH, res.status, text))
+  const next = toCredential(PATH_REFRESH, unwrapEnvelope(PATH_REFRESH, res.status, text))
   if (typeof current.sgcookie === 'string' && next.sgcookie === undefined) next.sgcookie = current.sgcookie
   return next
 }
@@ -254,7 +255,7 @@ export async function beginLogin(openBrowser) {
     const html = (status, title, message) =>
       response.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8' }).end(page(title, message))
 
-    if (url.pathname !== CALLBACK_PATH) return html(404, 'Accio 授权', '未知的回调路径')
+    if (url.pathname !== PATH_CALLBACK) return html(404, 'Accio 授权', '未知的回调路径')
 
     const params = url.searchParams
     // state 必须原样匹配：否则本机任何进程都能把别人的授权码塞进你的账号
@@ -303,7 +304,7 @@ export async function beginLogin(openBrowser) {
     throw error
   })
 
-  const redirectUri = `http://127.0.0.1:${port}${CALLBACK_PATH}`
+  const redirectUri = `http://127.0.0.1:${port}${PATH_CALLBACK}`
   const url = buildAuthUrl({ redirectUri, state, codeChallenge: pkce.challenge })
   if (typeof openBrowser === 'function') {
     try {
@@ -423,9 +424,9 @@ export function codeOf(id) {
 }
 
 export async function fetchCatalog(credential) {
-  const res = await fetch(`${GATEWAY}${CATALOG_PATH}`, {
+  const res = await fetch(`${GATEWAY}${PATH_CATALOG}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: jsonHeaders,
     body: JSON.stringify({ token: credential.access_token }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     ...net(),
@@ -487,9 +488,10 @@ export function catalogToModels(entries) {
 // ── OpenAI 请求 → Gemini 信封 ────────────────────────────────────────────
 
 const textOf = (content) => {
-  if (typeof content === 'string') return content
-  if (!Array.isArray(content)) return ''
-  return content.filter((block) => typeof block?.text === 'string').map((block) => block.text).join('')
+  const blocks = typeof content === 'string' ? [content] : Array.isArray(content) ? content : []
+  return blocks
+    .map((block) => (typeof block?.text === 'string' ? block.text : typeof block === 'string' ? block : ''))
+    .join('')
 }
 
 const dataUrlOf = (url) => {
@@ -497,130 +499,146 @@ const dataUrlOf = (url) => {
   return match === null ? undefined : { mimeType: match[1], data: match[2] }
 }
 
+/** 工具结果回填进 responseJson 的文本：字符串直用，数组拼 text 块，其它原样序列化。 */
+const responseTextOf = (content) => {
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) return content.filter((part) => typeof part?.text === 'string').map((part) => part.text).join('')
+  return JSON.stringify(content ?? {})
+}
+
 /**
- * OpenAI 消息 → `{contents, systemInstruction}`。
+ * OpenAI 消息列表 → Accio 信封 `{contents, systemInstruction}`。
  *
- * ⚠️ 工具结果要 `role:user + functionResponse`，**按 name 配对**（OpenAI 的 tool
- * 消息不带 name，得先扫 assistant 的 tool_calls 建 id→name 映射）。
- * ⚠️ functionResponse 必须紧密相邻：工具结果里内嵌的图片先攒着，
- *    等这一批 functionResponse 闭合之后，再作为**单独一条** user 消息追加。
+ * 形状约定（都是实测得出的，别动）：
+ * - `system`/`developer` 全部折进 systemInstruction（字符串，空行相接）。
+ * - `assistant` → `role:'model'`，tool_calls 变 functionCall（argsJson 保留原始字符串）。
+ * - `tool` → `role:'user'` + functionResponse，按 callId→name 配对（OpenAI 的 tool
+ *   消息不带 name，得先扫 assistant 的 tool_calls 建映射）；**连续多条工具结果合成
+ *   一条 user 消息**，保证紧挨上一批 functionCall。
+ * - 工具结果内嵌的 base64 图片不进 responseJson（会把 JSON 撑爆），在这批结果
+ *   之后单独补一条 user 消息携带 inlineData。
+ * - 用户消息的图片只收 base64 data URL。
  */
 export function serializeMessages(messages) {
-  const contents = []
-  const system = []
-  const toolNames = new Map()
-  for (const message of messages) {
-    if (message?.role === 'assistant' && Array.isArray(message.tool_calls)) {
-      for (const call of message.tool_calls) {
-        if (typeof call?.id === 'string' && typeof call?.function?.name === 'string') {
-          toolNames.set(call.id, call.function.name)
-        }
-      }
+  const callNames = new Map()
+  for (const msg of Array.isArray(messages) ? messages : []) {
+    for (const call of Array.isArray(msg?.tool_calls) ? msg.tool_calls : []) {
+      if (typeof call?.id === 'string' && typeof call?.function?.name === 'string') callNames.set(call.id, call.function.name)
     }
   }
 
-  const pendingImages = []
-  const collectToolImages = (content) => {
-    if (!Array.isArray(content)) return
-    for (const part of content) {
-      if (part?.type === 'image_url') {
-        const inline = dataUrlOf(part?.image_url?.url)
-        if (inline !== undefined) pendingImages.push(inline)
-      }
-    }
-  }
-  const flushImages = () => {
-    if (pendingImages.length === 0) return
+  const systemTexts = []
+  const contents = []
+  let toolImages = []
+
+  const inlineOf = (block) => (block?.type === 'image_url' ? dataUrlOf(block?.image_url?.url) : undefined)
+
+  const flushToolImages = () => {
+    if (toolImages.length === 0) return
+    const carried = toolImages
+    toolImages = []
     contents.push({
       role: 'user',
-      parts: [{ text: 'Attached image(s) from tool result:' }, ...pendingImages.map((inline) => ({ inlineData: inline }))],
+      parts: [{ text: 'Attached image(s) from tool result:' }, ...carried.map((inline) => ({ inlineData: inline }))],
     })
-    pendingImages.length = 0
   }
 
-  for (const message of messages) {
-    const role = message?.role
-    if (role === 'system' || role === 'developer') {
-      const text = textOf(message.content)
-      if (text !== '') system.push(text)
+  const assistantParts = (msg) => {
+    const parts = []
+    const text = textOf(msg.content)
+    if (text !== '') parts.push({ text })
+    for (const call of Array.isArray(msg.tool_calls) ? msg.tool_calls : []) {
+      parts.push({
+        functionCall: {
+          id: typeof call?.id === 'string' ? call.id : '',
+          name: typeof call?.function?.name === 'string' ? call.function.name : '',
+          argsJson: typeof call?.function?.arguments === 'string' ? call.function.arguments : '{}',
+        },
+      })
+    }
+    return parts
+  }
+
+  const userParts = (msg) => {
+    const parts = []
+    for (const block of Array.isArray(msg.content) ? msg.content : []) {
+      if (typeof block?.text === 'string') {
+        if (block.text !== '') parts.push({ text: block.text })
+        continue
+      }
+      const inline = inlineOf(block)
+      if (block?.type === 'image_url' && inline === undefined) {
+        throw new Error('accio：图片只支持 base64 data URL，远程图片链接请先下载成 data URL')
+      }
+      if (inline !== undefined) parts.push({ inlineData: inline })
+    }
+    return parts
+  }
+
+  let cursor = 0
+  while (cursor < messages.length) {
+    const msg = messages[cursor++]
+    if (msg === null || typeof msg !== 'object') continue
+
+    if (msg.role === 'system' || msg.role === 'developer') {
+      const text = textOf(msg.content)
+      if (text !== '') systemTexts.push(text)
       continue
     }
 
-    if (role === 'tool') {
-      const id = typeof message.tool_call_id === 'string' ? message.tool_call_id : ''
-      collectToolImages(message.content)
-      // responseJson 只装文本：含图数组整体 stringify 会把巨大 base64 塞进 JSON
-      const text = typeof message.content === 'string'
-        ? message.content
-        : Array.isArray(message.content)
-          ? message.content.filter((part) => typeof part?.text === 'string').map((part) => part.text).join('')
-          : JSON.stringify(message.content ?? {})
+    if (msg.role === 'tool') {
+      // 连续 tool 消息并入同一批
+      const batch = [msg]
+      while (cursor < messages.length && messages[cursor]?.role === 'tool') batch.push(messages[cursor++])
       contents.push({
         role: 'user',
-        parts: [{ functionResponse: { id, name: toolNames.get(id) ?? '', responseJson: text } }],
+        parts: batch.map((toolMessage) => {
+          for (const block of Array.isArray(toolMessage.content) ? toolMessage.content : []) {
+            const inline = inlineOf(block)
+            if (inline !== undefined) toolImages.push(inline)
+          }
+          const id = typeof toolMessage.tool_call_id === 'string' ? toolMessage.tool_call_id : ''
+          return { functionResponse: { id, name: callNames.get(id) ?? '', responseJson: responseTextOf(toolMessage.content) } }
+        }),
       })
+      flushToolImages()
       continue
     }
 
-    if (role === 'assistant') {
-      // 进下一条 model 消息前，上一批 functionResponse 必须已闭合
-      flushImages()
-      const parts = []
-      const text = textOf(message.content)
-      if (text !== '') parts.push({ text })
-      for (const call of Array.isArray(message.tool_calls) ? message.tool_calls : []) {
-        parts.push({
-          functionCall: {
-            id: typeof call?.id === 'string' ? call.id : '',
-            name: typeof call?.function?.name === 'string' ? call.function.name : '',
-            argsJson: typeof call?.function?.arguments === 'string' ? call.function.arguments : '{}',
-          },
-        })
-      }
+    if (msg.role === 'assistant') {
+      flushToolImages()
+      const parts = assistantParts(msg)
       if (parts.length > 0) contents.push({ role: 'model', parts })
       continue
     }
 
-    // user：图片走 Gemini 的 inlineData（只收 base64 data URL）
-    const parts = []
-    if (Array.isArray(message.content)) {
-      for (const block of message.content) {
-        if (typeof block?.text === 'string') {
-          if (block.text !== '') parts.push({ text: block.text })
-          continue
-        }
-        if (block?.type === 'image_url') {
-          const inline = dataUrlOf(block?.image_url?.url)
-          if (inline === undefined) throw new Error('accio：图片只支持 base64 data URL，远程图片链接请先下载成 data URL')
-          parts.push({ inlineData: inline })
-        }
-      }
-    }
+    const parts = userParts(msg)
     if (parts.length > 0) {
       contents.push({ role: 'user', parts })
       continue
     }
-    const text = textOf(message.content)
+    const text = textOf(msg.content)
     if (text !== '') contents.push({ role: 'user', parts: [{ text }] })
   }
 
-  flushImages()
-  return { contents, systemInstruction: system.join('\n\n') }
+  flushToolImages()
+  return { contents, systemInstruction: systemTexts.join('\n\n') }
 }
 
 export function toAccioTools(tools) {
-  const out = []
-  for (const tool of Array.isArray(tools) ? tools : []) {
-    const fn = tool?.function
-    if (fn === undefined || typeof fn.name !== 'string' || fn.name === '') continue
-    out.push({
-      name: fn.name,
-      description: typeof fn.description === 'string' ? fn.description : '',
-      // ⚠️ 必须是字符串：走 toSnake 下钻会改写 schema 里的参数名（filePath → file_path）
-      parametersJson: JSON.stringify(fn.parameters ?? { type: 'object', properties: {} }),
+  const picked = (Array.isArray(tools) ? tools : [])
+    .map((tool) => {
+      const fn = tool?.function
+      if (fn === undefined || typeof fn.name !== 'string' || fn.name === '') return undefined
+      return {
+        name: fn.name,
+        description: typeof fn.description === 'string' ? fn.description : '',
+        // ⚠️ 必须是字符串：toSnake 下钻会改写 schema 里的参数名（filePath → file_path）
+        parametersJson: JSON.stringify(fn.parameters ?? { type: 'object', properties: {} }),
+      }
     })
-  }
-  return out.length > 0 ? out : undefined
+    .filter((entry) => entry !== undefined)
+  return picked.length > 0 ? picked : undefined
 }
 
 export function buildBody({ model, accessToken, contents, systemInstruction, tools, temperature, maxOutputTokens, stop, requestId }) {
@@ -691,34 +709,52 @@ export function isErrorFrame(frame) {
 const finishOf = (reason) => (reason === 'MAX_TOKENS' || reason === 'max_tokens' ? 'length' : 'stop')
 
 /**
+ * 把响应体拆成**行**。上游流没有 [DONE]，EOF 即结束；`signal` 中止时提前收摊。
+ */
+async function* linesOf(body, signal) {
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  try {
+    let carry = ''
+    for (;;) {
+      if (signal?.aborted === true) return
+      const { done, value } = await reader.read()
+      if (done) break
+      carry += decoder.decode(value, { stream: true })
+      const pieces = carry.split('\n')
+      carry = pieces.pop() ?? ''
+      yield* pieces
+    }
+    carry += decoder.decode()
+    if (carry !== '') yield carry
+  } finally {
+    await reader.cancel?.().catch(() => {})
+    reader.releaseLock?.()
+  }
+}
+
+/**
  * 消费 Accio SSE，产出 OpenAI `chat.completion.chunk` 文本帧。
  *
  * 帧里可能出现：`content.parts[]`（text / functionCall）、顶层 `function_call`、
- * `usage_metadata`、`finish_reason`；工具调用**分片**到达，按 id 缓冲到最后合并。
- * 上游流**没有 [DONE]**，读到 EOF 就是结束。
+ * `usage_metadata`、`finish_reason`；工具调用**分片**到达，按 id 缓冲到结尾合并。
  */
 export async function* accioSseToOpenAi(body, { model, signal } = {}) {
-  const reader = body.getReader()
-  const decoder = new TextDecoder()
-  const id = `chatcmpl-accio-${Date.now().toString(36)}`
-  const created = Math.floor(Date.now() / 1000)
-  const chunk = (delta, finish = null) =>
-    `data: ${JSON.stringify({
-      id,
-      object: 'chat.completion.chunk',
-      created,
-      model,
-      choices: [{ index: 0, delta, finish_reason: finish }],
-    })}\n\n`
+  const streamId = `chatcmpl-accio-${Date.now().toString(36)}`
+  const openedAt = Math.floor(Date.now() / 1000)
+  const sse = (payload) => `data: ${JSON.stringify({ id: streamId, object: 'chat.completion.chunk', created: openedAt, model, ...payload })}\n\n`
+  const delta = (value, finish = null) => sse({ choices: [{ index: 0, delta: value, finish_reason: finish }] })
 
-  let buffer = ''
-  let sawAny = false
+  let sawAnything = false
   let finishReason
-  const usage = {}
+  const counters = {} // token 计数：多帧重复播报且早期帧偏小（缓存未命中时），取最大值
   const calls = new Map()
 
-  const noteUsage = (raw) => {
-    const source = typeof raw === 'object' && raw !== null ? raw : {}
+  const keepLarger = (slot, value) => {
+    if (value !== undefined && (counters[slot] === undefined || value > counters[slot])) counters[slot] = value
+  }
+  const absorbUsage = (meta) => {
+    const source = typeof meta === 'object' && meta !== null ? meta : {}
     const pick = (...keys) => {
       for (const key of keys) {
         const value = source[key]
@@ -726,99 +762,84 @@ export async function* accioSseToOpenAi(body, { model, signal } = {}) {
       }
       return undefined
     }
-    const pairs = [
-      ['prompt_tokens', pick('prompt_token_count', 'promptTokenCount')],
-      ['completion_tokens', pick('candidates_token_count', 'candidatesTokenCount')],
-      ['total_tokens', pick('total_token_count', 'totalTokenCount')],
-      ['reasoning_tokens', pick('thoughts_token_count', 'thoughtsTokenCount')],
-    ]
-    for (const [key, value] of pairs) {
-      // 多帧重复播报且早期帧偏小（缓存未命中时），取最大值
-      if (value !== undefined && (usage[key] === undefined || value > usage[key])) usage[key] = value
+    keepLarger('prompt_tokens', pick('prompt_token_count', 'promptTokenCount'))
+    keepLarger('completion_tokens', pick('candidates_token_count', 'candidatesTokenCount'))
+    keepLarger('total_tokens', pick('total_token_count', 'totalTokenCount'))
+    keepLarger('reasoning_tokens', pick('thoughts_token_count', 'thoughtsTokenCount'))
+  }
+
+  const bufferCall = (call) => {
+    const name = typeof call.name === 'string' ? call.name : ''
+    if (name === '') return // 无名调用整块丢弃（发出去上游 400）
+    const callId = typeof call.id === 'string' && call.id !== '' ? call.id : `call_${calls.size}`
+    const state = calls.get(callId) ?? { name, fragments: [] }
+    const args = call.args_json ?? call.argsJson
+    if (typeof args === 'string' && args !== '') state.fragments.push(args)
+    calls.set(callId, state)
+  }
+
+  const emitParts = function* (parts) {
+    for (const part of Array.isArray(parts) ? parts : []) {
+      if (part === null || typeof part !== 'object') continue
+      if (typeof part.text === 'string' && part.text !== '') {
+        sawAnything = true
+        // thought 标记的 part 是思考内容 → reasoning_content，别污染正文
+        yield delta(part.thought === true ? { reasoning_content: part.text } : { content: part.text })
+        continue
+      }
+      const call = part.functionCall ?? part.function_call
+      if (call !== null && typeof call === 'object') {
+        sawAnything = true
+        bufferCall(call)
+      }
     }
   }
 
-  const handlePart = function* (part) {
-    if (part === null || typeof part !== 'object') return
-    if (typeof part.text === 'string' && part.text !== '') {
-      sawAny = true
-      // thought 标记的 part 是思考内容 → reasoning_content，别污染正文
-      yield chunk(part.thought === true ? { reasoning_content: part.text } : { content: part.text })
-      return
-    }
-    const call = part.functionCall ?? part.function_call
-    if (call !== null && typeof call === 'object') {
-      sawAny = true
-      const callId = typeof call.id === 'string' && call.id !== '' ? call.id : `call_${calls.size}`
-      const name = typeof call.name === 'string' ? call.name : ''
-      if (name === '') return // 无名调用整块丢弃（发出去上游 400）
-      const state = calls.get(callId) ?? { name, fragments: [], order: calls.size }
-      const args = call.args_json ?? call.argsJson
-      if (typeof args === 'string' && args !== '') state.fragments.push(args)
-      calls.set(callId, state)
-    }
-  }
-
-  const handleFrame = function* (frame) {
+  const emitFrame = function* (frame) {
     if (isErrorFrame(frame)) {
       const code = String(frame.error_code ?? frame.errorCode ?? '')
       const message = String(frame.error_message ?? frame.errorMessage ?? '')
       const detail = [code === '' ? '' : `error_code=${code}`, message].filter((s) => s !== '').join(' ')
       throw new Error(`accio ${code === '402' ? '额度或认证失败' : '上游返回错误帧'}（${detail}）`)
     }
-    noteUsage(frame.usage_metadata ?? frame.usageMetadata)
-    if (typeof frame.finish_reason === 'string' && frame.finish_reason !== '') finishReason = frame.finish_reason
-    if (typeof frame.finishReason === 'string' && frame.finishReason !== '') finishReason = frame.finishReason
-    const content = frame.content
-    if (content !== null && typeof content === 'object' && Array.isArray(content.parts)) {
-      for (const part of content.parts) yield* handlePart(part)
+    absorbUsage(frame.usage_metadata ?? frame.usageMetadata)
+    for (const key of ['finish_reason', 'finishReason']) {
+      if (typeof frame[key] === 'string' && frame[key] !== '') finishReason = frame[key]
     }
+    yield* emitParts(frame.content?.parts)
     // 顶层 function_call（无 content 信封）是真实形状，丢了工具调用就凭空消失
     const topCall = frame.function_call ?? frame.functionCall
-    if (topCall !== null && typeof topCall === 'object') yield* handlePart({ function_call: topCall })
+    if (topCall !== null && typeof topCall === 'object') {
+      sawAnything = true
+      bufferCall(topCall)
+    }
   }
 
-  const processLine = function* (rawLine) {
-    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
-    if (!line.startsWith('data:')) return
-    const payload = line.slice(5).trim()
-    if (payload === '' || payload === '[DONE]') return
-    let frame
+  const frameOf = (line) => {
+    const trimmed = line.endsWith('\r') ? line.slice(0, -1) : line
+    if (!trimmed.startsWith('data:')) return undefined
+    const payload = trimmed.slice(5).trim()
+    if (payload === '' || payload === '[DONE]') return undefined
     try {
-      frame = JSON.parse(payload)
+      return JSON.parse(payload)
     } catch {
-      return
+      return undefined
     }
-    yield* handleFrame(frame)
   }
 
-  try {
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) {
-        buffer += decoder.decode()
-        if (buffer !== '') for (const line of buffer.split('\n')) yield* processLine(line)
-        break
-      }
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() ?? ''
-      for (const line of lines) yield* processLine(line)
-      if (signal?.aborted === true) break
-    }
-  } finally {
-    await reader.cancel?.().catch(() => {})
-    reader.releaseLock?.()
+  for await (const line of linesOf(body, signal)) {
+    const frame = frameOf(line)
+    if (frame !== undefined) yield* emitFrame(frame)
   }
 
-  if (!sawAny) throw new Error('accio：模型没有返回任何内容块')
+  if (!sawAnything) throw new Error('accio：模型没有返回任何内容块')
 
   // 工具调用统一在结尾一次性发出（OpenAI 侧按 index 拼）
-  let index = 0
+  let toolIndex = 0
   for (const [callId, state] of calls) {
-    yield chunk({
+    yield delta({
       tool_calls: [{
-        index: index++,
+        index: toolIndex++,
         id: callId,
         type: 'function',
         function: { name: state.name, arguments: mergeToolArgs(state.fragments) },
@@ -826,17 +847,17 @@ export async function* accioSseToOpenAi(body, { model, signal } = {}) {
     })
   }
 
-  yield chunk({}, finishOf(finishReason))
-  if (Object.keys(usage).length > 0) {
-    const prompt = usage.prompt_tokens ?? 0
-    const completion = usage.completion_tokens ?? 0
-    const out = {
+  yield delta({}, finishOf(finishReason))
+  if (Object.keys(counters).length > 0) {
+    const prompt = counters.prompt_tokens ?? 0
+    const completion = counters.completion_tokens ?? 0
+    const usage = {
       prompt_tokens: prompt,
       completion_tokens: completion,
-      total_tokens: usage.total_tokens ?? prompt + completion,
+      total_tokens: counters.total_tokens ?? prompt + completion,
     }
-    if (usage.reasoning_tokens !== undefined) out.completion_tokens_details = { reasoning_tokens: usage.reasoning_tokens }
-    yield `data: ${JSON.stringify({ id, object: 'chat.completion.chunk', created, model, choices: [], usage: out })}\n\n`
+    if (counters.reasoning_tokens !== undefined) usage.completion_tokens_details = { reasoning_tokens: counters.reasoning_tokens }
+    yield sse({ choices: [], usage })
   }
   yield 'data: [DONE]\n\n'
 }
@@ -933,7 +954,7 @@ export async function chat(credential, { body: openaiBody, signal, renew }) {
   })
 
   const send = (current) => fetchWithRetry(
-    () => fetch(`${GATEWAY}${LLM_PATH}?sg_k=${sgKOf(requestId)}`, {
+    () => fetch(`${GATEWAY}${PATH_LLM}?sg_k=${sgKOf(requestId)}`, {
       method: 'POST',
       headers: requestHeaders(current),
       body: JSON.stringify({ ...payload, token: current.access_token }),
@@ -1030,7 +1051,7 @@ export async function fetchUserInfo(credential) {
   try {
     const response = await fetch(`${GATEWAY}/api/auth/userinfo`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: jsonHeaders,
       body: JSON.stringify({ accessToken: credential.access_token }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       ...net(),
@@ -1102,7 +1123,7 @@ async function entitlementGet(path, credential) {
  * 「这个桶没开通」，不是「每月额度用光了」。算成 100% 会在卡片上挂一条假红条。
  */
 export async function usage(credential) {
-  const data = await entitlementGet(SUBSCRIPTION_PATH, credential)
+  const data = await entitlementGet(PATH_SUBSCRIPTION, credential)
   const entitlement = typeof data?.entitlement === 'object' && data.entitlement !== null ? data.entitlement : undefined
   if (entitlement === undefined) {
     if (typeof data?.remaining !== 'number') return [{ name: 'Accio', used: 0, display: '响应未包含余额字段' }]
@@ -1111,7 +1132,7 @@ export async function usage(credential) {
 
   let dailyResetIso
   try {
-    const quota = await entitlementGet(QUOTA_PATH, credential)
+    const quota = await entitlementGet(PATH_QUOTA, credential)
     const seconds = Number(quota?.refreshCountdownSeconds)
     if (Number.isFinite(seconds) && seconds > 0) dailyResetIso = new Date(Date.now() + seconds * 1000).toISOString()
   } catch { /* 倒计时缺席就留空，不编造 */ }
