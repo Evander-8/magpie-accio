@@ -80,13 +80,28 @@ description 与 topics。
 
 ## 2. 发布到 npm
 
+**需要 npm 账号**（公开包不需要组织，unscoped 直接发）：
+
+1. 注册：<https://www.npmjs.com/signup> —— 用户名随意，邮箱要能收信。
+2. 开 2FA：头像 → Account Settings → Two-Factor Authentication → TOTP（npm 现在发布基本都要求）。
+3. 生成 token：头像 → Access Tokens → Generate New Token
+   - 简单版：**Classic Token → Automation**（绕过 OTP，脚本用这个最省事）
+   - 更细：**Granular Access Token** → Packages and scopes = `Read and write`、Packages = `All packages`、勾 `Bypass 2FA`
+4. 发布（`bun publish` 认 `NPM_CONFIG_TOKEN` 这个环境变量，实测由「无 token」变成「401」即证明它读到了）：
+
 ```powershell
 cd "D:\03_Personal\AI Agent\Deepseek Harness默认空间\magpie-accio"
-$env:NPM_CONFIG_TOKEN = $env:NPM_TOKEN
-& "C:\Users\<你>\.cache\magpie\bun\1.4.2\magpie-bun.exe" publish --access public
+$env:NPM_TOKEN = "npm_xxx"
+$env:HTTPS_PROXY = "http://127.0.0.1:7890"
+& "$env:USERPROFILE\.cache\magpie\bun\1.4.2\magpie-bun.exe" publish\npm-publish.mjs --registry
 ```
 
-有 Node 环境就 `npm publish --access public`，等价。
+`publish/npm-publish.mjs` 会先 `GET /-/whoami` 校验 token、查包名归属（不是你的就直接停），
+再 `bun publish --access public`，最后（带 `--registry`）调用 `open-registry-pr.mjs` 提 PR。
+`--dry-run` 只打包不发。
+
+> ⚠️ 这台机器的 PowerShell 执行策略禁止运行 `.ps1`（`... 因为在此系统上禁止运行脚本`），
+> 所以所有辅助脚本都是 `.mjs`，用 magpie 自带的 bun 跑。
 
 发布前可以先自检包内容（**包目录在中文路径下时，`bun pm pack` 要指定输出目录**）：
 
