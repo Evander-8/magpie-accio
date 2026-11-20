@@ -38,30 +38,41 @@ if (!dryRun && token === '') {
 }
 
 const api = async (path, init = {}) => {
-  const res = await fetch(`https://api.github.com${path}`, {
-    ...init,
-    headers: {
-      accept: 'application/vnd.github+json',
-      authorization: `Bearer ${token}`,
-      'user-agent': 'magpie-accio-registry-pr',
-      'x-github-api-version': '2022-11-28',
-      ...(init.headers ?? {}),
-    },
-    ...(proxy === '' ? {} : { proxy }),
-  })
-  const text = await res.text()
-  let body
-  try {
-    body = text === '' ? undefined : JSON.parse(text)
-  } catch {
-    body = text
+  let lastError
+  // 这台机器的网络会突然 RST（代理抖动/直连抽风），所有请求都重试三次
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const res = await fetch(`https://api.github.com${path}`, {
+        ...init,
+        headers: {
+          accept: 'application/vnd.github+json',
+          authorization: `Bearer ${token}`,
+          'user-agent': 'magpie-accio-registry-pr',
+          'x-github-api-version': '2022-11-28',
+          ...(init.headers ?? {}),
+        },
+        ...(proxy === '' ? {} : { proxy }),
+      })
+      const text = await res.text()
+      let body
+      try {
+        body = text === '' ? undefined : JSON.parse(text)
+      } catch {
+        body = text
+      }
+      if (!res.ok) {
+        const error = new Error(`GitHub ${init.method ?? 'GET'} ${path} → ${res.status} ${body?.message ?? String(body).slice(0, 160)}`)
+        error.status = res.status
+        throw error
+      }
+      return body
+    } catch (error) {
+      lastError = error
+      if (error.status !== undefined && error.status < 500) throw error
+      await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1)))
+    }
   }
-  if (!res.ok) {
-    const error = new Error(`GitHub ${init.method ?? 'GET'} ${path} → ${res.status} ${body?.message ?? String(body).slice(0, 160)}`)
-    error.status = res.status
-    throw error
-  }
-  return body
+  throw lastError
 }
 
 /** 把条目插到 `"plugins": [` 之后（文本插入，不动别人的排版）。 */
