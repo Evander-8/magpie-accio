@@ -178,9 +178,11 @@ for (const upload of uploads) {
   })
   blobs.push({ path: upload.path, mode: '100644', type: 'blob', sha: blob.sha })
 }
+// 不传 base_tree：这次提交的树**就是**仓库的完整内容，本地删掉的文件在远端也会消失
+// （之前用 base_tree 时，删掉的 publish/push.ps1 会一直留在仓库里）。
 const tree = await api(`/repos/${owner}/${repo}/git/trees`, {
   method: 'POST',
-  body: JSON.stringify({ base_tree: parent.tree.sha, tree: blobs }),
+  body: JSON.stringify({ tree: blobs }),
 })
 const pkgVersion = JSON.parse(readFileSync(pkgPath, 'utf8')).version
 const commit = await api(`/repos/${owner}/${repo}/git/commits`, {
