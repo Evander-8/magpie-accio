@@ -9,7 +9,8 @@
 // 注意：npm 发布**公开且不可撤回**，同一个版本号不能重发。
 
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync, mkdirSync, rmSync, cpSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -76,13 +77,29 @@ if (exists.ok) {
   console.warn(`包名查询返回 ${exists.status}，继续尝试发布`)
 }
 
-const run = (argv) => {
-  const result = spawnSync(BUN, argv, { stdio: 'inherit', cwd: root, env: process.env })
+const run = (argv, cwd = root) => {
+  const result = spawnSync(BUN, argv, { stdio: 'inherit', cwd, env: process.env })
   if (result.status !== 0) throw new Error(`bun ${argv.join(' ')} 退出码 ${result.status}`)
 }
 
+// ⚠️ `bun publish` 在**含中文的路径**下建不出 tarball：
+//   error: failed to open tarball file destination: "...\magpie-accio-0.2.3.tgz"
+// 所以先镜像到纯 ASCII 的临时目录里发布（`bun pm pack` 也是同一个毛病）。
+const staging = join(tmpdir(), 'magpie-accio-publish')
+rmSync(staging, { recursive: true, force: true })
+mkdirSync(staging, { recursive: true })
+for (const entry of readdirSync(root)) {
+  if (entry === 'node_modules' || entry === '.git' || entry === 'dist' || entry.endsWith('.tgz')) continue
+  cpSync(join(root, entry), join(staging, entry), { recursive: true })
+}
+console.log(`发布目录（ASCII 路径）：${staging}`)
+
 console.log('\n== 1/2 发布到 npm ==')
-run(['publish', '--access', 'public', ...(has('dry-run') ? ['--dry-run'] : [])])
+// 需要 2FA 的 token（Classic "Publish" 类型 / 没勾 Bypass 的 Granular）会要求 OTP：
+//   bun publish --otp 123456
+// 推荐直接用 Classic → Automation token，省掉每次输码。
+const otp = flag('otp')
+run(['publish', '--access', 'public', ...(otp ? [`--otp=${otp}`] : []), ...(has('dry-run') ? ['--dry-run'] : [])], staging)
 
 if (has('registry') && !has('dry-run')) {
   const auth = spawnSync(GH, ['auth', 'token'], { encoding: 'utf8' })
