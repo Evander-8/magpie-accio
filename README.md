@@ -4,20 +4,18 @@
 
 `v0.2.4` · MIT · [npm](https://www.npmjs.com/package/magpie-accio) · [源码](https://github.com/Evander-8/magpie-accio)
 
-```
-magpie 网关 ──OpenAI 线格式──▶ magpie-accio ──Gemini 信封 + 私有 SSE──▶ phoenix-gw.alibaba.com
-     ▲                              │
-     └──────── 模型 / 用量 ◀────────┘   （登录态存在 magpie 的插件槽里）
-```
+- **登录**：Accio 自己的 OAuth（PKCE + 本机回环回调），token 存进 magpie 插件槽
+- **对话**：magpie 网关 → 本插件翻译成 Gemini 信封 → `phoenix-gw.alibaba.com`
+- **不碰**任何本机客户端文件，也不依赖厂商桌面程序
 
 ## 它能做什么
 
-- **网页登录，不装客户端**：Accio 自己的 OAuth（PKCE + 本机回环回调），token 存进 magpie 插件登录态。
-- **实时模型目录**：每个账号按自己的权益拉 `visible` 且未锁定的模型，名字直接带积分倍率。
-- **完整对话能力**：流式输出、工具调用、思维链单独成 `reasoning_content`、图片输入。
-- **自动续期**：到期前续 token；`refresh_token` 一次性轮换，插件按账号做单飞，避免并发把账号标死。
-- **额度卡片**：每日 / 推荐积分的占用与剩余、每日刷新倒计时（只读，不消耗积分）。
-- **可选本地反代**：在 `127.0.0.1` 上开一个 OpenAI 兼容端点，给 curl / 其它客户端用。
+- **网页登录，不装客户端**：不读 DPAPI、不加载厂商的原生库，跨平台。
+- **实时模型目录**：按账号权益拉取，名字直接带积分倍率。
+- **完整对话**：流式、工具调用、思维链单独成 `reasoning_content`、图片输入。
+- **自动续期**：`refresh_token` 一次性轮换，按账号单飞，避免并发把账号标死。
+- **额度卡片**：每日 / 推荐积分的占用与剩余、每日刷新倒计时（只读）。
+- **可选本地反代**：`127.0.0.1` 上的 OpenAI 兼容端点。
 
 > 非官方插件，只做中国版（`www.accio-ai.com`）。计费走你自己的 Accio 账号。
 
@@ -98,12 +96,23 @@ test/run.mjs     离线自测（不联网）
 4. **工具结果**用 `role:user + functionResponse`，且紧挨着上一批 `functionCall`，中间插消息会断开配对。
 5. **`refresh_token` 一次性轮换**：续期按账号单飞；`403 + HTML` 不续期（风控），`401/403 + JSON` 才续一次。
 
+## 已知限制
+
+- **只做中国版**：登录页固定 `www.accio-ai.com`。
+- **非官方**：Accio 没有公开的第三方接入文档，接口按 2026-11 实测口径实现。
+- **计费在 Accio 侧**：对话消耗账号积分；拉目录 / 查额度 / 续期不消耗。
+- **思考关不掉**：上游没有受控字段关 reasoning，档位只做展示。
+- **图片只收 base64 data URL**：远程图片链接会被明确拒绝。
+
 ## 与 magpie 宿主的两条硬规矩
 
-| 现象 | 原因 | 做法 |
-| --- | --- | --- |
-| 登录报「the sign-in failed」或「gave nothing to keep」 | `callback()` 返回值必须 `type:'success'` 且带 `refresh`/`access` | 交 `{type:'success', access, refresh, expires, …}` |
-| 账号到点不续期 | `renewAt()` 只认 `stored.type === 'oauth'` | 自己写槽用 `{type:'oauth', …}`；旧槽在 `models()`/`loader()` 里就地升级 |
+| 现象 | 做法 |
+| --- | --- |
+| 登录报「the sign-in failed」「gave nothing to keep」 | `callback()` 返回 `{type:'success', access, refresh, expires, …}` |
+| 账号到点不续期 | 自己写槽用 `{type:'oauth', …}`，旧槽在 `models()`/`loader()` 里升级 |
+
+原因：宿主 `signingIn()` 要求 `r.type === 'success'`，`keptAs()` 要求带 `refresh`/`access`，
+而 `renewAt()` 只对 `stored.type === 'oauth'` 生效。
 
 ## 排障
 
