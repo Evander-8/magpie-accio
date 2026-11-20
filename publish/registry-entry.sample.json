@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "plugins": [
+    { "package": "@magpie-community/example-a", "name": "Example A", "providers": ["example-a"], "community": true,
+      "summary": { "en": "first entry", "zh": "第一条" } },
+    { "package": "example-b", "name": "Example B", "kind": "middleware", "community": true,
+      "summary": { "en": "second entry", "zh": "第二条" } }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "name": "magpie-accio",
+  "version": "0.2.3",
+  "description": "magpie 插件：网页登录 Accio（阿里 Accio Work，中国版）后把它的模型反代成 magpie 供应商，不需要 Accio 桌面客户端。",
+  "type": "module",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "src",
+    "icons",
+    "publish",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "magpie",
+    "magpie-plugin",
+    "opencode",
+    "opencode-plugin",
+    "accio",
+    "alibaba",
+    "provider",
+    "openai-compatible"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node ./test/run.mjs"
+  },
+  "magpie": {
+    "maxConcurrency": 4
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Evander-8/magpie-accio.git"
+  },
+  "homepage": "https://github.com/Evander-8/magpie-accio#readme",
+  "bugs": {
+    "url": "https://github.com/Evander-8/magpie-accio/issues"
+  }
+}
