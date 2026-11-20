@@ -1,6 +1,6 @@
 {
   "name": "magpie-accio",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "网页登录 Accio（阿里 Accio Work，中国版），把账号模型接进 magpie：实时目录带倍率、工具调用、自动续期、额度卡片，可选本地 OpenAI 兼容反代。",
   "type": "module",
   "main": "./index.mjs",

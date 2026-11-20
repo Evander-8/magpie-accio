@@ -128,12 +128,14 @@ export default async function AccioPlugin(input, options = {}) {
    * `HTTPS_PROXY/HTTP_PROXY/ALL_PROXY`（实测 Bun 的 fetch 会照它走），所以默认不用配置；
    * 想单独指定就用插件选项 `proxy`。
    */
-  const envProxy = options_.proxy
-    ?? process.env.HTTPS_PROXY ?? process.env.https_proxy
-    ?? process.env.HTTP_PROXY ?? process.env.http_proxy
-    ?? process.env.ALL_PROXY ?? process.env.all_proxy
-    ?? ''
-  if (typeof envProxy === 'string' && envProxy.trim() !== '') setProxy(envProxy.trim())
+  // 注意：选项 `proxy` 默认是**空字符串**（不是 undefined），所以这里不能只用 `??`，
+  // 否则空串会把宿主的 HTTPS_PROXY 挡掉，目录拉取直接失败（表现为「目录拉取失败，用兜底」）。
+  const envProxy = [options_.proxy,
+    process.env.HTTPS_PROXY, process.env.https_proxy,
+    process.env.HTTP_PROXY, process.env.http_proxy,
+    process.env.ALL_PROXY, process.env.all_proxy,
+  ].find((value) => typeof value === 'string' && value.trim() !== '') ?? ''
+  if (envProxy !== '') setProxy(envProxy)
   log(`出口代理：${proxyOf() === '' ? '（无，直连）' : proxyOf()}`)
 
   const readAuth = async () => {

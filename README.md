@@ -2,7 +2,7 @@
 
 把 **Accio（阿里 Accio Work，中国版）** 的模型接进 **magpie**：网页登录一次即可，不需要 Accio 桌面客户端。
 
-`v0.2.4` · MIT · [npm](https://www.npmjs.com/package/magpie-accio) · [源码](https://github.com/Evander-8/magpie-accio)
+`v0.2.5` · MIT · [npm](https://www.npmjs.com/package/magpie-accio) · [源码](https://github.com/Evander-8/magpie-accio)
 
 - **登录**：Accio 自己的 OAuth（PKCE + 本机回环回调），token 存进 magpie 插件槽
 - **对话**：magpie 网关 → 本插件翻译成 Gemini 信封 → `phoenix-gw.alibaba.com`

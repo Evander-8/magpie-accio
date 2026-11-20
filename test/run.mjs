@@ -633,6 +633,28 @@ test('出口代理：显式设置后每个请求都带 init.proxy', async () => 
   }
 })
 
+test('选项 proxy 为空串时不能挡住宿主的 HTTPS_PROXY', async () => {
+  const { default: AccioPlugin } = await import('../index.mjs')
+  const { proxyOf, setProxy } = await import('../src/accio.mjs')
+  const backup = { ...process.env }
+  try {
+    setProxy('')
+    process.env.HTTPS_PROXY = 'http://127.0.0.1:7890'
+    delete process.env.ALL_PROXY
+    delete process.env.HTTP_PROXY
+    const { input } = fakeInput()
+    await AccioPlugin(input, { proxy: '' })
+    assert.equal(proxyOf(), 'http://127.0.0.1:7890', 'host 选项默认空串，应回落到宿主代理')
+
+    setProxy('')
+    await AccioPlugin(input, { proxy: 'http://127.0.0.1:9999' })
+    assert.equal(proxyOf(), 'http://127.0.0.1:9999', '显式写了就用它')
+  } finally {
+    process.env = backup
+    setProxy('')
+  }
+})
+
 test('usage：免费账号的 monthly{total:0} 不能算成「已用 100%」', async () => {
   const { usage } = await import('../src/accio.mjs')
   // 下面两份响应是 2026-11-20 真机抓的原文（FREE 套餐）
