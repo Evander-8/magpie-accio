@@ -141,9 +141,13 @@ if (created) {
 // ⚠️ 空仓库不接受 `POST /git/blobs`（GitHub 回 409 "Git Repository is empty"）。
 // 所以先看有没有分支：没有就用 Contents API 落一个 README 建出初始提交，
 // 再拿它当 parent，把其余文件用一次提交补上。
+// ⚠️ 一律按**字节**读、base64 上传：PNG 之类的二进制按 utf8 读会被替换坏
+// （第一次推送就是这么把图标推成 6903B 的破图的）。
 const uploads = files.map(({ path, full }) => ({
   path,
-  content: path === 'package.json' ? pkgText : readFileSync(full, 'utf8'),
+  base64: path === 'package.json'
+    ? Buffer.from(pkgText, 'utf8').toString('base64')
+    : readFileSync(full).toString('base64'),
 }))
 
 let parent
@@ -157,7 +161,7 @@ try {
     method: 'PUT',
     body: JSON.stringify({
       message: 'chore: seed commit（GitHub 空仓库不能直接建 blob）',
-      content: Buffer.from(seed.content, 'utf8').toString('base64'),
+      content: seed.base64,
       branch,
     }),
   })
@@ -170,7 +174,7 @@ const blobs = []
 for (const upload of uploads) {
   const blob = await api(`/repos/${owner}/${repo}/git/blobs`, {
     method: 'POST',
-    body: JSON.stringify({ content: Buffer.from(upload.content, 'utf8').toString('base64'), encoding: 'base64' }),
+    body: JSON.stringify({ content: upload.base64, encoding: 'base64' }),
   })
   blobs.push({ path: upload.path, mode: '100644', type: 'blob', sha: blob.sha })
 }
