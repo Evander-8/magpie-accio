@@ -11,10 +11,8 @@ flowchart LR
   E --> C --> B --> A
 ```
 
-对照参考项目 [tidys/dsh-connect-accio](https://github.com/tidys/dsh-connect-accio)：那个读的是
-**本机已登录的 Accio 客户端**（DPAPI 解 `credentials.enc` + 客户端自带 `security_guard.node` 签名），
-只能装在 Windows、必须先开客户端。**本插件反过来**：不碰本机客户端任何文件，用 Accio 自己的
-**网页 OAuth（PKCE）** 登录，凭据存在 magpie 的插件登录态里。
+本插件不碰本机任何客户端文件，也不依赖厂商的桌面程序：用 Accio 自己的 **网页 OAuth（PKCE）**
+在浏览器里登录，授权码经本机回环回调换回 token，凭据存在 magpie 的插件登录态里。
 
 > 非官方插件。计费走你自己的 Accio 账号。**只做中国版**（`www.accio-ai.com`）。
 
@@ -134,7 +132,7 @@ Accio 官网的 `favicon.ico` 实测返回的是 `text/html`（30KB 的 SPA 页�
 ```sh
 node test/run.mjs
 # 或 magpie 自带的 bun：
-"C:\Users\<你>\.cache\magpie\bun\1.4.4\magpie-bun.exe" test/run.mjs
+"C:\Users\<你>\.cache\magpie\bun\1.4.2\magpie-bun.exe" test/run.mjs
 ```
 
 覆盖：信封解析、秒→毫秒、目录归一（含 **locked 不拉取**、倍率后缀）、slug↔modelCode、

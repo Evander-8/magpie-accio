@@ -30,9 +30,8 @@ $env:HTTPS_PROXY  = "http://127.0.0.1:7890"
 ② registry PR magpie-community/plugins → 需要 GitHub token（public_repo 就够，已有）
 ```
 
-顺带一提：`magpie-accio` 这个名字在 npm 上**还没被占用**（实测 registry 返回 404），
-magpie 社区 registry 目前 126 条里也**没有** Accio 专用条目（只有 `magpie-providers-hub`
-里面的 `hub-accio` 渠道），所以上架不会撞名。
+`magpie-accio` 这个名字当时在 npm 上是空的（registry 返回 404），社区 registry 里也没有
+`providers: ["accio"]` 的条目，所以上架不会撞名。
 
 两个脚本都**不需要装 git**，全走 GitHub / npm 的 HTTP API。
 

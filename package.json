@@ -1,6 +1,6 @@
 {
   "name": "magpie-accio",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "magpie 插件：网页登录 Accio（阿里 Accio Work，中国版）后把它的模型反代成 magpie 供应商，不需要 Accio 桌面客户端。",
   "type": "module",
   "main": "./index.mjs",
