@@ -23,7 +23,6 @@ const flag = (name, fallback = '') => {
 const GH = 'D:\\01_Software\\Portable\\gh\\gh.exe'
 const BUN = process.env.MAGPIE_BUN ?? join(process.env.USERPROFILE ?? '', '.cache', 'magpie', 'bun', '1.4.2', 'magpie-bun.exe')
 
-if (!process.env.HTTPS_PROXY && !process.env.https_proxy) process.env.HTTPS_PROXY = 'http://127.0.0.1:7890'
 
 const run = (command, argv, options = {}) => {
   const result = spawnSync(command, argv, { stdio: 'inherit', cwd: root, env: process.env, ...options })

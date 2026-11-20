@@ -85,7 +85,6 @@ console.log('\n== 1/2 发布到 npm ==')
 run(['publish', '--access', 'public', ...(has('dry-run') ? ['--dry-run'] : [])])
 
 if (has('registry') && !has('dry-run')) {
-  if (!process.env.HTTPS_PROXY) process.env.HTTPS_PROXY = 'http://127.0.0.1:7890'
   const auth = spawnSync(GH, ['auth', 'token'], { encoding: 'utf8' })
   if (auth.status !== 0) throw new Error('提 PR 需要 gh 已登录（gh auth login）')
   process.env.GITHUB_TOKEN = (auth.stdout ?? '').trim()
