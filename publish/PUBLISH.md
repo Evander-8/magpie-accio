@@ -1,11 +1,33 @@
 # 发布与上架（让 magpie 里能搜到）
 
+## 当前进度（2026-11-20）
+
+| 步骤 | 状态 |
+| --- | --- |
+| GitHub 仓库 | ✅ https://github.com/Evander-8/magpie-accio（public，19 个文件，description + topics 已设） |
+| 图标 | ✅ 官网 mark（`s.alicdn.com/.../24-24.svg`）→ headless Edge 渲成 48/128/256 PNG（白底圆角），仓库里的字节与本机一致 |
+| npm 发布 | ⛔ 卡在这里：没有 npm token（`magpie-accio` 名字实测未被占用） |
+| registry PR | ⏸ 等 npm 有包之后再提（脚本已就绪，一条命令） |
+
+工具：GitHub CLI 已装在 `D:\01_Software\Portable\gh\gh.exe`（v2.105.0），已登录 `Evander-8`，
+PAT 由 `gh auth token` 提供；这台机器 **没有 git**，所以推送走 GitHub REST API（`publish/github-upload.mjs`）。
+
+```powershell
+# 已跑过、以后重复推用这条（gh 已登录的话 token 自动取）
+$env:GITHUB_TOKEN = (& "D:\01_Software\Portable\gh\gh.exe" auth token).Trim()
+$env:HTTPS_PROXY  = "http://127.0.0.1:7890"
+& "$env:USERPROFILE\.cache\magpie\bun\1.4.2\magpie-bun.exe" publish\github-upload.mjs --owner Evander-8
+```
+
+> 二进制文件必须按**字节** base64 上传。第一版脚本把 PNG 当 utf8 读，推上去的图标是坏图
+> （6903B vs 本地 3872B）；现在改为 `readFileSync(path)` 取 Buffer，四个图标与本机 sha256 一致。
+
 本地装的是**路径依赖**：`magpie plugin add "D:\...\magpie-accio"`。要出现在 magpie 的
 **Plugins 页面 / 搜索结果**里，还差两步，而这两步都需要**你的账号**：
 
 ```
 ① npm 发布    magpie-accio            → 需要 npm token
-② registry PR magpie-community/plugins → 需要 GitHub token（public_repo 就够）
+② registry PR magpie-community/plugins → 需要 GitHub token（public_repo 就够，已有）
 ```
 
 顺带一提：`magpie-accio` 这个名字在 npm 上**还没被占用**（实测 registry 返回 404），
