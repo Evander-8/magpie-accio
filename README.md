@@ -2,8 +2,6 @@
 
 把 **Accio（阿里 Accio Work，中国版）** 的模型接进 **magpie**：网页登录一次就能用，不必装 Accio 桌面客户端。
 
-`v0.2.6` · MIT · [npm](https://www.npmjs.com/package/magpie-accio) · [源码](https://github.com/Evander-8/magpie-accio)
-
 - **登录** —— Accio 网页 OAuth（PKCE + `127.0.0.1` 回环回调），凭据写进 magpie 的插件槽，过期自动续。
 - **对话** —— magpie 给的是 OpenAI 线格式，插件翻成 Gemini 信封发往 `phoenix-gw.alibaba.com`，流式回包再反译成 OpenAI SSE。
 - **落地形态** —— 一个 OpenCode v1 server 插件（`config` / `auth` / `provider` 三个钩子），纯 HTTP，无原生模块。
