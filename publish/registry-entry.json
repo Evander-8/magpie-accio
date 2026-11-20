@@ -1,9 +1,11 @@
 {
   "package": "magpie-accio",
   "name": "Accio (阿里)",
-  "providers": ["accio"],
+  "providers": [
+    "accio"
+  ],
   "community": true,
-  "icon": "https://raw.githubusercontent.com/GITHUB_OWNER/magpie-accio/main/icons/accio-128.png",
+  "icon": "https://raw.githubusercontent.com/Evander-8/magpie-accio/main/icons/accio-128.png",
   "summary": {
     "en": "Accio (Alibaba Accio Work, China) on magpie without the Accio desktop app: sign in on the web page (PKCE + loopback callback), then serve the account's live model catalog with credit multipliers, tool calls, reasoning split out, token refresh, a quota card, and an optional local OpenAI-compatible reverse proxy.",
     "zh": "不需要 Accio 桌面客户端：在网页登录（PKCE + 本机回环回调）后，把阿里 Accio Work（中国版）的模型接进 magpie —— 实时目录带积分倍率、工具调用、思维链分离、自动续期、额度卡片，并可选在本机开一个 OpenAI 兼容反代端口。"
